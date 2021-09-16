@@ -1,0 +1,1300 @@
+
+//15 * 15 棋盘，黑色和白色两种棋子；
+//在[3][3]，[3][11]，[11][3]，[11][11]和[7][7]五个位置的点分别加粗（如图1）；
+//棋盘宽度自动适应窗口尺寸（即窗口变大，棋盘变大；窗口缩小，棋盘跟着缩小）；
+//点击鼠标左键下子，奇数次点击下黑子，偶数次点击下白子（即点第一下是黑子，第二下是白字，第三下黑子……）；
+//用户通常没办法将鼠标100%点中下棋子的位置，因此我们的程序应该自动找到最接近的下子位置（如图2）；
+//当黑白任何一方在横、竖、斜任何一个方向有五个棋子连续相连，则应该显示该方胜利（如图3）；
+//点击鼠标右键初始化棋盘，重新开始游戏。
+#include <windows.h>
+#include <windowsx.h>
+#include "strsafe.h"
+#define LRESERVE 30 //外围空白大小
+
+LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
+int * WhoWin(int composition[15][15],int i,int j);//判断是否满足五连棋i:y坐标，j:x坐标
+int * RobotA(int composition[15][15], int ypoint, int xpoint);//机器人A
+
+void blackpoint(BOOL flag,int ypoint, int xpoint);
+
+
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR szCmdLine, int iCmdShow)
+{
+	static TCHAR szAppName[] = TEXT("MyWindows");
+	HWND hwnd;
+	MSG msg;
+	WNDCLASS wndclass;
+
+	wndclass.style = CS_HREDRAW | CS_VREDRAW;
+	wndclass.lpfnWndProc = WndProc;
+	wndclass.cbClsExtra = 0;
+	wndclass.cbWndExtra = 0;
+	wndclass.hInstance = hInstance;
+	wndclass.hIcon = LoadIcon(NULL, IDI_APPLICATION);
+	wndclass.hCursor = LoadCursor(NULL, IDC_ARROW);
+	wndclass.hbrBackground = (HBRUSH)GetStockObject(LTGRAY_BRUSH);
+	wndclass.lpszMenuName = NULL;
+	wndclass.lpszClassName = szAppName;
+
+	if (!RegisterClass(&wndclass))
+	{
+		MessageBox(NULL, TEXT("这个程序需要在 Windows NT 才能执行！"), szAppName, MB_ICONERROR);
+		return 0;
+	}
+
+	hwnd = CreateWindow(szAppName,
+		TEXT("五子棋对战"),
+		WS_OVERLAPPEDWINDOW,
+		CW_USEDEFAULT,
+		CW_USEDEFAULT,
+		CW_USEDEFAULT,
+		CW_USEDEFAULT,
+		NULL,
+		NULL,
+		hInstance,
+		NULL);
+
+	ShowWindow(hwnd, iCmdShow);
+	UpdateWindow(hwnd);
+
+	while (GetMessage(&msg, NULL, 0, 0))
+	{
+		TranslateMessage(&msg);
+		DispatchMessage(&msg);
+	}
+
+	return msg.wParam;
+}
+int * WhoWin(int compositin[15][15],int i, int j)
+{
+	int x, y, count[4][11];//0个数，1A端堵截情况，2B端堵截情况，3-4A端坐标y，x，5-6B端坐标y，x,7-10AB端潜在威胁及个数
+	//0:未堵截，1：堵截，2：没法堵
+	enum dir { xdir, ydir, xydir, yxdir };
+	enum inform { numb, acut, bcut, aypoint, axpoint, bypoint, bxpoint,amine,camine,bmine,cbmine };
+	for (int i = 0; i < 4; i++)
+	{
+		count[i][numb] = 1;//初始个数1个，AB未拦截
+		count[i][acut] = 0;
+		count[i][bcut] = 0;
+		count[i][amine] = 0;
+		count[i][bmine] = 0;
+		count[i][camine] = 0;
+		count[i][cbmine] = 0;
+
+	}
+	
+	
+	
+	
+	//水平方向判断
+	x = j, y = i;
+	while (x > 0)//向左数
+	{
+		x--;
+		if (compositin[y][x] == compositin[i][j])
+		{
+			count[xdir][numb]++;
+			if (x == 0)
+			{
+				count[xdir][acut] = 2;
+				count[xdir][axpoint] = 0;
+				count[xdir][aypoint] = y;
+
+			}
+		}
+			
+		else
+		{
+			
+			if (compositin[y][x] != 0)
+				count[xdir][acut] = 1;
+			count[xdir][axpoint] = x+1;
+			count[xdir][aypoint] = y;
+			if(x-1>=0)
+				if (compositin[y][x - 1] == compositin[i][j])
+				{
+					count[xdir][amine] = 1;
+					count[xdir][camine] = 1;
+					for (int q = x - 2; q >= 0; q--)
+					{
+						if (compositin[y][q] == compositin[i][j])
+							count[xdir][camine] ++;
+						else
+							q = -1;
+					}
+						
+
+				}
+
+			x = -1;//退出
+		}
+		
+			
+	}
+	
+	x = j,y=i;
+	while (x < 14)//向右数
+	{
+		x++;
+		if (compositin[y][x] == compositin[i][j])
+		{
+			count[xdir][numb]++;
+			if (x == 14)
+			{
+				count[xdir][bcut] = 2;
+				count[xdir][bxpoint] = 14;
+				count[xdir][bypoint] = y;
+			}
+		}
+			
+		else
+		{
+			if (compositin[y][x] != 0)
+				count[xdir][bcut] = 1;
+			count[xdir][bxpoint] = x-1;
+			count[xdir][bypoint] = y;
+			if(x+1<=14)
+				if (compositin[y][x + 1] == compositin[i][j])
+				{
+					count[xdir][bmine] = 1;
+					count[xdir][cbmine] = 1;
+					for (int q = x + 2; q <= 14; q++)
+					{
+						if (compositin[y][q] == compositin[i][j])
+							count[xdir][cbmine] ++;
+						else
+							q = 15;
+					}
+						
+
+				}
+			x = 15;//退出
+			
+		}
+		
+
+			
+	}
+	
+
+	//竖直方向判断
+	
+	x = j, y = i;
+	while (y > 0)//向上数
+	{
+		y--;
+		if (compositin[y][x] == compositin[i][j])
+		{
+			count[ydir][numb]++;
+			if (y == 0)
+			{
+				count[ydir][acut] = 2;
+				count[ydir][axpoint] = x;
+				count[ydir][aypoint] = 0;
+			}
+				
+		}
+			
+		else
+		{
+			
+			if (compositin[y][x] != 0)
+				count[ydir][acut] = 1;
+			count[ydir][axpoint] = x;
+			count[ydir][aypoint] = y+1;
+			if (y - 1 >= 0)
+				if (compositin[y - 1][x] == compositin[i][j])
+				{
+					count[ydir][amine] = 1;
+					count[ydir][camine] = 1;
+					for (int q = y - 2; q >= 0; q--)
+					{
+						if (compositin[q][x] == compositin[i][j])
+							count[ydir][camine] ++;
+						else
+							q = -1;
+
+					}
+
+				}
+
+			y = -1;//退出
+		}
+		
+
+	}
+	
+	x = j, y = i;
+	while (y < 14)//向下数
+	{
+		y++;
+		if (compositin[y][x] == compositin[i][j])
+		{
+			count[ydir][numb]++;
+			if (y == 14)
+			{
+				count[ydir][bcut] = 2;
+				count[ydir][bxpoint] = x;
+				count[ydir][bypoint] = y ;
+
+			}
+		}
+			
+		else
+		{
+			
+			if (compositin[y][x] != 0)
+				count[ydir][bcut] = 1;
+			count[ydir][bxpoint] = x;
+			count[ydir][bypoint] = y-1;
+			if (y + 1 <= 14)
+				if (compositin[y + 1][x] == compositin[i][j])
+				{
+					count[ydir][bmine] = 1;
+					count[ydir][cbmine] = 1;
+					for (int q = y + 2; q <= 14; q++)
+					{
+						if (compositin[q][x] == compositin[i][j])
+							count[ydir][cbmine] ++;
+						else
+							q = 15;
+
+					}
+
+				}
+			y = 15;//退出
+		}
+		
+	}
+	
+
+	//正45度判断
+	
+	x = j, y = i;
+	while (x > 0 && y < 14)//向左下方数
+	{
+		x--;
+		y++;
+		if (compositin[y][x] == compositin[i][j])
+		{
+			count[xydir][numb]++;
+			if (x == 0||y==14)
+			{
+				count[xydir][acut] = 2;
+				count[xydir][axpoint] = x;
+				count[xydir][aypoint] = y;
+			}
+
+		}
+			
+		else
+		{
+			
+			if (compositin[y][x] != 0)
+				count[xydir][acut] = 1;
+			count[xydir][axpoint] = x+1;
+			count[xydir][aypoint] = y-1;
+			if(x-1>=0&&y+1<=14)
+				if (compositin[y + 1][x - 1] == compositin[i][j])
+				{
+					count[xydir][amine] = 1;
+					count[xydir][camine] = 1;
+					for (int xx = x - 2, yy = y + 1; xx >= 0 && yy <= 14; xx--, yy++)
+					{
+						if (compositin[yy][xx] == compositin[i][j])
+							count[xydir][camine] ++;
+						else
+							xx = -1;
+
+					}
+						
+
+				}
+
+			x = -1;//退出
+		}
+		
+				
+	}
+	
+	x = j, y = i;
+	while (x < 14 && y > 0)//向右上方数
+	{
+		x++;
+		y--;
+		if (compositin[y][x] == compositin[i][j])
+		{
+			count[xydir][numb]++;
+			if (x == 14 || y == 0)
+			{
+				count[xydir][bcut] = 2;
+				count[xydir][bxpoint] = x;
+				count[xydir][bypoint] = y;
+			}
+		}
+			
+		else
+		{
+			
+			if (compositin[y][x] != 0)
+				count[xydir][bcut] = 1;
+			count[xydir][bxpoint] = x-1;
+			count[xydir][bypoint] = y+1;
+			if (x + 1 <=14  && y - 1 >=0)
+				if (compositin[y - 1][x + 1] == compositin[i][j])
+				{
+					count[xydir][bmine] = 1;
+					count[xydir][cbmine] = 1;
+					for (int xx = x + 2, yy = y - 2; xx <= 14 && yy >= 0; xx++, yy--)
+					{
+						if (compositin[yy][xx] == compositin[i][j])
+							count[xydir][cbmine] ++;
+						else
+							xx = 15;
+
+					}
+				}
+
+			y = -1;//退出
+		}
+		
+
+	}
+	
+
+	//负45度判断
+	
+	x = j, y = i;
+	while (x > 0 && y >0)//向左上方数
+	{
+		x--;
+		y--;
+		if (compositin[y][x] == compositin[i][j])
+		{
+
+			count[yxdir][numb]++;
+			if (x == 0 || y == 0)
+			{
+				count[yxdir][acut] = 2;
+				count[yxdir][axpoint] = x;
+				count[yxdir][aypoint] = y;
+			}
+		}
+		else
+		{
+			
+			if (compositin[y][x] != 0)
+				count[yxdir][acut] = 1;
+			count[yxdir][axpoint] = x+1;
+			count[yxdir][aypoint] = y+1;
+			if(x-1>=0&&y-1>=0)
+				if (compositin[y - 1][x - 1] == compositin[i][j])
+				{
+					count[yxdir][amine] = 1;
+					count[yxdir][camine] = 1;
+					for (int xx = x - 2, yy = y - 2; xx >= 0 && yy >= 0; xx--, yy--)
+					{
+						if (compositin[yy][xx] == compositin[i][j])
+							count[yxdir][camine] ++;
+						else
+							xx = -1;
+
+					}
+
+				}
+
+			x = -1;//退出
+		}
+	
+
+	}
+	
+	x = j, y = i;
+	while (x < 14 && y < 14)//向右下方数
+	{
+		x++;
+		y++;
+		if (compositin[y][x] == compositin[i][j])
+		{
+			count[yxdir][numb]++;
+			if (x == 14 || y == 14)
+			{
+				count[yxdir][bcut] = 2;
+				count[yxdir][bxpoint] = x;
+				count[yxdir][bypoint] = y;
+			}
+		}
+			
+		else
+		{
+			
+			if (compositin[y][x] != 0)
+				count[yxdir][bcut] = 1;
+			count[yxdir][bxpoint] = x-1;
+			count[yxdir][bypoint] = y-1;
+			if (x + 1 <=14 && y + 1 <=14)
+				if (compositin[y + 1][x + 1] == compositin[i][j])
+				{
+					count[yxdir][bmine] = 1;
+					count[yxdir][cbmine] = 1;
+					for (int xx = x + 2, yy = y + 2; xx <= 14 && yy <= 14; xx++, yy++)
+					{
+						if (compositin[yy][xx] == compositin[i][j])
+							count[yxdir][cbmine] ++;
+						else
+							xx = 15;
+
+					}
+
+				}
+			x = 15;//退出
+		}
+		
+
+	}
+	
+	/*result[0] = max(max(count[xdir], count[ydir]), max(count[xydir], count[yxdir]));
+	if (result[0] == count[xdir])
+		result[1] = xdir;
+	else if(result[0] == count[ydir])
+		result[1] = ydir;
+	else if (result[0] == count[xydir])
+		result[1] = xydir;
+	else if (result[0] == count[yxdir])
+		result[1] = yxdir;*/
+	
+
+	return count;
+
+}
+//第一代：各种堵截
+BOOL bFlagFindWhite = FALSE;
+int whitexpoint, whiteypoint,whitecount=0;
+int whiteaxpoint, whiteaypoint, whitebxpoint, whitebypoint, whitedir;
+int blackxpoint=-1, blackypoint=-1;
+void blackpoint(BOOL flag, int ypoint, int xpoint)
+{
+	if (!flag)
+	{
+		blackxpoint = xpoint;
+		blackypoint = ypoint;
+	}
+}
+int * RobotA(int composition[15][15], int ypoint, int xpoint)
+{
+	int resultpoint[8];//[0]x坐标[1]y坐标[2]个数，[3]axpoint[4]aypoint[5]bxpoint[6]bypoint[7]dir
+	int (*count)[11],cnumb[4], maxdir[4] = {0,1,2,3}; //棋子多的方向排序,默认
+	enum inform { numb, acut, bcut, aypoint, axpoint, bypoint, bxpoint,amine,camine,bmine,cbmine };
+	
+	enum dir
+	{
+		xdir, 
+		ydir,
+		xydir,
+		yxdir
+	};
+	count = WhoWin(composition, ypoint, xpoint);
+	
+	cnumb[0] = count[0][0];
+	cnumb[1] = count[1][0];
+	cnumb[2] = count[2][0];
+	cnumb[3] = count[3][0];
+
+	
+	//排序maxdir[4]
+	int i, left = 0, right = 3;
+	int temp;
+	while (left < right)
+	{
+		for (i = left; i < right; i++)
+		{
+			if (cnumb[i] < cnumb[i+1])
+			{
+				temp = maxdir[i];
+				maxdir[i] = maxdir[i + 1];
+				maxdir[i + 1] = temp;
+				temp = cnumb[i];
+				cnumb[i] = cnumb[i + 1];
+				cnumb[i + 1] = temp;
+			}
+				
+		}
+		right--;
+		for (i = right; i > left; i--)
+		{
+			if (cnumb[i] > cnumb[i - 1])
+			{
+				temp = maxdir[i];
+				maxdir[i] = maxdir[i - 1];
+				maxdir [i-1]= temp;
+				temp = cnumb[i];
+				cnumb[i] = cnumb[i - 1];
+				cnumb[i - 1] = temp;
+			}
+		}
+		left++;
+	}
+	//棋子多的优先堵截,判断是否已经堵截,已经单头堵截的处理下一个方向,达到四个的时候堵截另一端
+	if (bFlagFindWhite)
+	{
+		int c = 0;
+		for (int index = 0; index < 4; index++)
+			switch (maxdir[index])
+			{
+			case xdir:
+
+				for (int i = -1; whitexpoint + i >= 0 && c < 4; i--)
+				{
+
+					if (composition[whiteypoint][whiteaxpoint + i] == 0 || composition[whiteypoint][whiteaxpoint + i] == composition[whiteypoint][whiteaxpoint])
+						c++;
+					else
+						i = -20;
+				}
+				for (int i = 1; whitexpoint + i <= 14 && c < 4; i++)
+				{
+					if (composition[whiteypoint][whitexpoint + i] == 0 || composition[whiteypoint][whiteaxpoint + i] == composition[whiteypoint][whiteaxpoint])
+						c++;
+					else
+						i = 20;
+				}
+				if (c < 4)
+					maxdir[index]=-1;
+				break;
+			case ydir:
+				for (int i = -1; whiteypoint + i >= 0 && c < 4; i--)
+				{
+					if (composition[whiteypoint + i][whitexpoint] == 0 || composition[whiteypoint][whiteaxpoint + i] == composition[whiteypoint][whiteaxpoint])
+						c++;
+					else
+						i = -20;
+				}
+				for (int i = 1; whiteypoint + i <= 14 && c < 4; i++)
+				{
+					if (composition[whiteypoint + 1][whitexpoint] == 0 || composition[whiteypoint][whiteaxpoint + i] == composition[whiteypoint][whiteaxpoint])
+						c++;
+					else
+						i = 20;
+				}
+				if (c < 4)
+					maxdir[index] = -1;
+				break;
+			case xydir:
+				for (int i = -1; whitexpoint + i >= 0 && whiteypoint - i <= 14 && c < 4; i--)
+				{
+					if (composition[whiteypoint - i][whitexpoint + i] == 0 || composition[whiteypoint][whiteaxpoint + i] == composition[whiteypoint][whiteaxpoint])
+						c++;
+					else
+						i = -20;
+				}
+				for (int i = 1; whitexpoint + i <= 14 && whiteypoint - i >= 0 && c < 4; i++)
+				{
+					if (composition[whiteypoint - i][whitexpoint + i] == 0 || composition[whiteypoint][whiteaxpoint + i] == composition[whiteypoint][whiteaxpoint])
+						c++;
+					else
+						i = 20;
+				}
+				if (c < 4)
+					maxdir[index] = -1;
+				break;
+			case yxdir:
+				for (int i = -1; whitexpoint + i >= 0 && whiteypoint + i >= 0 && c < 4; i--)
+				{
+					if (composition[whiteypoint + i][whitexpoint + i] == 0 || composition[whiteypoint][whiteaxpoint + i] == composition[whiteypoint][whiteaxpoint])
+						c++;
+					else
+						i = -20;
+				}
+				for (int i = 1; whitexpoint + i <= 14 && whiteypoint + i <= 14 && c < 4; i++)
+				{
+					if (composition[whiteypoint + i][whitexpoint + i] == 0 || composition[whiteypoint][whiteaxpoint + i] == composition[whiteypoint][whiteaxpoint])
+						c++;
+					else
+						i = 20;
+				}
+				if (c < 4)
+					maxdir[index] = -1;
+				break;
+			}
+	}
+
+	for (int index = 0; index < 4; index++)
+	{
+		switch (maxdir[index])
+		{
+			
+		case xdir:
+			
+			
+			if (count[xdir][amine] ==1&&(( count[xdir][numb] + count[xdir][camine]+1 > 3)||( bFlagFindWhite&& count[xdir][numb] + count[xdir][camine] + 1 > whitecount)))
+			{
+				
+				resultpoint[0] = count[xdir][axpoint] -1 ;
+				resultpoint[1] = count[xdir][aypoint];
+				resultpoint[2] = count[xdir][numb]+1;
+
+				resultpoint[axpoint] = count[xdir][axpoint] - 1;
+				resultpoint[aypoint]= count[xdir][aypoint];
+				resultpoint[bxpoint] = count[xdir][bxpoint];
+				resultpoint[bypoint] = count[xdir][bypoint];
+				resultpoint[7] = xdir;
+
+				blackpoint(bFlagFindWhite, ypoint, xpoint);
+				return resultpoint;
+
+			}
+			else if (count[xdir][bmine] && ((count[xdir][numb] + count[xdir][cbmine] + 1 > 3)||( bFlagFindWhite && count[xdir][numb] + count[xdir][cbmine] + 1 >whitecount)))
+			{
+				resultpoint[0] = count[xdir][bxpoint] + 1;
+				resultpoint[1] = count[xdir][bypoint];
+				resultpoint[2] = count[xdir][numb] + 1;
+
+				resultpoint[axpoint] = count[xdir][axpoint] ;
+				resultpoint[aypoint] = count[xdir][aypoint];
+				resultpoint[bxpoint] = count[xdir][bxpoint]+1;
+				resultpoint[bypoint] = count[xdir][bypoint];
+				resultpoint[7] = xdir;
+				blackpoint(bFlagFindWhite, ypoint, xpoint);
+
+				return resultpoint;
+
+			}
+			else if (count[xdir][acut] == 0  && (bFlagFindWhite || (count[xdir][numb] >= 2 && count[xdir][numb] > whitecount)))
+			{
+				resultpoint[0] = count[xdir][axpoint] - 1;
+				resultpoint[1] = count[xdir][aypoint];
+				resultpoint[2] = count[xdir][numb];
+
+				resultpoint[axpoint] = count[xdir][axpoint] - 1;
+				resultpoint[aypoint] = count[xdir][aypoint];
+				resultpoint[bxpoint] = count[xdir][bxpoint];
+				resultpoint[bypoint] = count[xdir][bypoint];
+				resultpoint[7] = xdir;
+				blackpoint(bFlagFindWhite, ypoint, xpoint);
+
+				return resultpoint;
+			}
+			else if ((count[xdir][numb] == 4 && count[xdir][bcut] == 0 && count[xdir][numb] > whitecount)||(bFlagFindWhite && count[xdir][bcut] == 0))
+			{
+				resultpoint[0] = count[xdir][bxpoint] + 1;
+				resultpoint[1] = count[xdir][bypoint];
+				resultpoint[2] = count[xdir][numb];
+
+				resultpoint[axpoint] = count[xdir][axpoint] ;
+				resultpoint[aypoint] = count[xdir][aypoint];
+				resultpoint[bxpoint] = count[xdir][bxpoint]+1;
+				resultpoint[bypoint] = count[xdir][bypoint];
+				resultpoint[7] = xdir;
+				blackpoint(bFlagFindWhite, ypoint, xpoint);
+
+				return resultpoint;
+			}
+
+
+			break;
+		case ydir:
+			
+			 if (count[ydir][amine] && ((count[ydir][numb] + count[ydir][camine] + 1 > 3 )|| (bFlagFindWhite && count[ydir][numb] + count[ydir][camine] + 1 >whitecount)))
+			{
+				resultpoint[0] = count[ydir][axpoint] ;
+				resultpoint[1] = count[ydir][aypoint]-1;
+				resultpoint[2] = count[ydir][numb] + 1;
+
+				resultpoint[axpoint] = count[ydir][axpoint] ;
+				resultpoint[aypoint] = count[ydir][aypoint] - 1;
+				resultpoint[bxpoint] = count[ydir][bxpoint];
+				resultpoint[bypoint] = count[ydir][bypoint];
+				resultpoint[7] = ydir;
+				blackpoint(bFlagFindWhite, ypoint, xpoint);
+
+				return resultpoint;
+			}
+			else if (count[ydir][bmine] && (count[ydir][numb] + count[ydir][cbmine] + 1 > 3||(bFlagFindWhite&&count[ydir][numb] + count[ydir][cbmine] + 1 > whitecount)))
+			{
+				resultpoint[0] = count[ydir][bxpoint];
+				resultpoint[1] = count[ydir][bypoint] + 1;
+				resultpoint[2] = count[ydir][numb] + 1;
+				
+				resultpoint[axpoint] = count[ydir][axpoint];
+				resultpoint[aypoint] = count[ydir][aypoint] ;
+				resultpoint[bxpoint] = count[ydir][bxpoint];
+				resultpoint[bypoint] = count[ydir][bypoint]+1;
+				resultpoint[7] = ydir;
+				blackpoint(bFlagFindWhite, ypoint, xpoint);
+
+				return resultpoint;
+			}
+			else if (count[ydir][acut] == 0 && (bFlagFindWhite || (count[ydir][numb] >= 2 && count[ydir][numb] > whitecount)))
+			{
+				resultpoint[0] = count[ydir][axpoint];
+				resultpoint[1] = count[ydir][aypoint] - 1;
+				resultpoint[2] = count[ydir][numb];
+
+				resultpoint[axpoint] = count[ydir][axpoint];
+				resultpoint[aypoint] = count[ydir][aypoint] - 1;
+				resultpoint[bxpoint] = count[ydir][bxpoint];
+				resultpoint[bypoint] = count[ydir][bypoint];
+				resultpoint[7] = ydir;
+				blackpoint(bFlagFindWhite, ypoint, xpoint);
+
+				return resultpoint;
+			}
+			else if ((count[ydir][numb] == 4 && count[ydir][bcut] == 0 && count[ydir][numb] > whitecount)|| (bFlagFindWhite&& count[ydir][bcut] == 0))
+			{
+				resultpoint[0] = count[ydir][bxpoint];
+				resultpoint[1] = count[ydir][bypoint] + 1;
+				resultpoint[2] = count[ydir][numb];
+
+				resultpoint[axpoint] = count[ydir][axpoint];
+				resultpoint[aypoint] = count[ydir][aypoint];
+				resultpoint[bxpoint] = count[ydir][bxpoint];
+				resultpoint[bypoint] = count[ydir][bypoint] + 1;
+				resultpoint[7] = ydir;
+				blackpoint(bFlagFindWhite, ypoint, xpoint);
+
+				return resultpoint;
+			}
+			break;
+		case xydir:
+			
+			 if (count[xydir][amine] && (count[xydir][numb] + count[xydir][camine] + 1 > 3||(bFlagFindWhite&&count[xydir][numb] + count[xydir][camine] + 1 > whitecount)))
+			{
+				resultpoint[0] = count[xydir][axpoint]-1;
+				resultpoint[1] = count[xydir][aypoint] + 1;
+				resultpoint[2] = count[xydir][numb] + 1;
+
+				resultpoint[axpoint] = count[xydir][axpoint]-1;
+				resultpoint[aypoint] = count[xydir][aypoint]+1;
+				resultpoint[bxpoint] = count[xydir][bxpoint];
+				resultpoint[bypoint] = count[xydir][bypoint] ;
+				resultpoint[7] = xydir;
+				blackpoint(bFlagFindWhite, ypoint, xpoint);
+
+				return resultpoint;
+			}
+			else if (count[xydir][bmine] && (count[xydir][numb] + count[xydir][cbmine] + 1 > 3|| (bFlagFindWhite&&count[xydir][numb] + count[xydir][cbmine] + 1 >whitecount)))
+			{
+				resultpoint[0] = count[xydir][bxpoint] + 1;
+				resultpoint[1] = count[xydir][bypoint] - 1;
+				resultpoint[2] = count[xydir][numb] + 1;
+
+				resultpoint[axpoint] = count[xydir][axpoint] ;
+				resultpoint[aypoint] = count[xydir][aypoint] ;
+				resultpoint[bxpoint] = count[xydir][bxpoint]+1;
+				resultpoint[bypoint] = count[xydir][bypoint]-1;
+				resultpoint[7] = xydir;
+				blackpoint(bFlagFindWhite, ypoint, xpoint);
+
+				return resultpoint;
+			}
+			else if (count[xydir][acut] == 0  && (bFlagFindWhite || (count[xydir][numb] >= 2 && count[xydir][numb] > whitecount)))
+			 {
+				 resultpoint[0] = count[xydir][axpoint] - 1;
+				 resultpoint[1] = count[xydir][aypoint] + 1;
+				 resultpoint[2] = count[xydir][numb];
+
+				 resultpoint[axpoint] = count[xydir][axpoint] - 1;
+				 resultpoint[aypoint] = count[xydir][aypoint] + 1;
+				 resultpoint[bxpoint] = count[xydir][bxpoint];
+				 resultpoint[bypoint] = count[xydir][bypoint];
+				 resultpoint[7] = xydir;
+				 blackpoint(bFlagFindWhite, ypoint, xpoint);
+
+				 return resultpoint;
+			 }
+			 else if ((count[xydir][numb] == 4 && count[xydir][bcut] == 0 && count[xydir][numb] > whitecount)||(bFlagFindWhite&&count[xydir][bcut] == 0))
+			 {
+				 resultpoint[0] = count[xydir][bxpoint] + 1;
+				 resultpoint[1] = count[xydir][bypoint] - 1;
+				 resultpoint[2] = count[xydir][numb];
+
+				 resultpoint[axpoint] = count[xydir][axpoint];
+				 resultpoint[aypoint] = count[xydir][aypoint];
+				 resultpoint[bxpoint] = count[xydir][bxpoint] + 1;
+				 resultpoint[bypoint] = count[xydir][bypoint] - 1;
+				 resultpoint[7] = xydir;
+				 blackpoint(bFlagFindWhite, ypoint, xpoint);
+
+				 return resultpoint;
+			 }
+			break;
+		case yxdir:
+			
+			if (count[yxdir][amine] && (count[yxdir][numb] + count[yxdir][camine] + 1 > 3|| (bFlagFindWhite&&count[yxdir][numb] + count[yxdir][camine] + 1 >whitecount)))
+			{
+				resultpoint[0] = count[yxdir][axpoint] - 1;
+				resultpoint[1] = count[yxdir][aypoint] - 1;
+				resultpoint[2] = count[yxdir][numb] + 1;
+
+				resultpoint[axpoint] = count[yxdir][axpoint]-1;
+				resultpoint[aypoint] = count[yxdir][aypoint]-1;
+				resultpoint[bxpoint] = count[yxdir][bxpoint] ;
+				resultpoint[bypoint] = count[yxdir][bypoint] ;
+				resultpoint[7] = yxdir;
+				blackpoint(bFlagFindWhite, ypoint, xpoint);
+
+				return resultpoint;
+			}
+			else if (count[yxdir][bmine] && (count[yxdir][numb] + count[yxdir][cbmine] + 1 > 3|| (bFlagFindWhite&&count[yxdir][numb] + count[yxdir][cbmine] + 1 >whitecount)))
+			{
+				resultpoint[0] = count[yxdir][bxpoint] + 1;
+				resultpoint[1] = count[yxdir][bypoint] + 1;
+				resultpoint[2] = count[yxdir][numb] + 1;
+
+				resultpoint[axpoint] = count[yxdir][axpoint] ;
+				resultpoint[aypoint] = count[yxdir][aypoint] ;
+				resultpoint[bxpoint] = count[yxdir][bxpoint]+1;
+				resultpoint[bypoint] = count[yxdir][bypoint]+1;
+				resultpoint[7] = yxdir;
+				blackpoint(bFlagFindWhite, ypoint, xpoint);
+
+				return resultpoint;
+			}
+			else  if (count[yxdir][acut] == 0&& (bFlagFindWhite || (count[yxdir][numb] >= 2 && count[yxdir][numb] > whitecount)))
+			 {
+				 resultpoint[0] = count[yxdir][axpoint] - 1;
+				 resultpoint[1] = count[yxdir][aypoint] - 1;
+				 resultpoint[2] = count[yxdir][numb];
+
+				 resultpoint[axpoint] = count[yxdir][axpoint] - 1;
+				 resultpoint[aypoint] = count[yxdir][aypoint] - 1;
+				 resultpoint[bxpoint] = count[yxdir][bxpoint];
+				 resultpoint[bypoint] = count[yxdir][bypoint];
+				 resultpoint[7] = yxdir;
+				 blackpoint(bFlagFindWhite, ypoint, xpoint);
+
+				 return resultpoint;
+			 }
+			 else if ((count[yxdir][numb] == 4 && count[yxdir][bcut] == 0 && count[yxdir][numb] > whitecount)||(bFlagFindWhite&& count[yxdir][bcut] == 0))
+			 {
+				 resultpoint[0] = count[yxdir][bxpoint] + 1;
+				 resultpoint[1] = count[yxdir][bypoint] + 1;
+				 resultpoint[2] = count[yxdir][numb];
+
+				 resultpoint[axpoint] = count[yxdir][axpoint];
+				 resultpoint[aypoint] = count[yxdir][aypoint];
+				 resultpoint[bxpoint] = count[yxdir][bxpoint] + 1;
+				 resultpoint[bypoint] = count[yxdir][bypoint] + 1;
+				 resultpoint[7] = yxdir;
+				 blackpoint(bFlagFindWhite, ypoint, xpoint);
+
+				 return resultpoint;
+			 }
+			break;
+		default:
+
+			break;
+		}
+			
+
+
+	}
+
+	//不用堵则寻找合适的位置主动攻击
+	int * againresult;
+	if (whitecount != 0)
+	{
+		BOOL ballcut = FALSE;
+		int c = 0;
+		//判断白棋是否被堵
+		switch (whitedir)
+			
+		{
+		case xdir:
+			
+			for (int i = -1; whitexpoint + i >= 0&&c<4; i--)
+			{
+				if (composition[whiteypoint][whiteaxpoint +i] == 0|| composition[whiteypoint][whiteaxpoint + i] == composition[whiteypoint][whiteaxpoint ])
+					c++;
+				else
+					i = -20;
+			}
+			for (int i = 1; whitexpoint + i <=14 && c < 4; i++)
+			{
+				if (composition[whiteypoint][whitexpoint + i] == 0 || composition[whiteypoint][whiteaxpoint + i] == composition[whiteypoint][whiteaxpoint])
+					c++;
+				else
+					i = 20;
+			}
+			if(c<4)
+				ballcut = TRUE;
+			break;
+		case ydir:
+			for (int i = -1; whiteypoint + i >= 0 && c < 4; i--)
+			{
+				if (composition[whiteypoint+i][whitexpoint] == 0 || composition[whiteypoint][whiteaxpoint + i] == composition[whiteypoint][whiteaxpoint])
+					c++;
+				else
+					i = -20;
+			}
+			for (int i = 1; whiteypoint + i <= 14 && c < 4; i++)
+			{
+				if (composition[whiteypoint+1][whitexpoint ] == 0 || composition[whiteypoint][whiteaxpoint + i] == composition[whiteypoint][whiteaxpoint])
+					c++;
+				else
+					i = 20;
+			}
+			if (c < 4)
+				ballcut = TRUE;
+			break;
+		case xydir:
+			for (int i = -1; whitexpoint + i >= 0&& whiteypoint-i<=14 && c < 4; i--)
+			{
+				if (composition[whiteypoint - i][whitexpoint+i] == 0 || composition[whiteypoint][whiteaxpoint + i] == composition[whiteypoint][whiteaxpoint])
+					c++;
+				else
+					i = -20;
+			}
+			for (int i = 1; whitexpoint + i <= 14 && whiteypoint - i >=0 && c < 4; i++)
+			{
+				if (composition[whiteypoint -i][whitexpoint+i] == 0 || composition[whiteypoint][whiteaxpoint + i] == composition[whiteypoint][whiteaxpoint])
+					c++;
+				else
+					i = 20;
+			}
+			if (c < 4)
+				ballcut = TRUE;
+			break;
+		case yxdir:
+			for (int i = -1; whitexpoint + i >= 0 && whiteypoint + i >= 0 && c < 4; i--)
+			{
+				if (composition[whiteypoint + i][whitexpoint + i] == 0 || composition[whiteypoint][whiteaxpoint + i] == composition[whiteypoint][whiteaxpoint])
+					c++;
+				else
+					i = -20;
+			}
+			for (int i = 1; whitexpoint + i <= 14 && whiteypoint + i <= 14 && c < 4; i++)
+			{
+				if (composition[whiteypoint + i][whitexpoint + i] == 0 || composition[whiteypoint][whiteaxpoint + i] == composition[whiteypoint][whiteaxpoint])
+					c++;
+				else
+					i = 20;
+			}
+			if (c < 4)
+				ballcut = TRUE;
+			break;
+		}
+		if (ballcut&&whitecount>=3)//再次堵截
+		{
+			whitecount = 1;
+			RobotA(composition, blackypoint, blackxpoint);//传入黑棋位置实施堵截
+		}
+		else//白棋（AI）主动进攻
+		{
+
+			bFlagFindWhite = TRUE;
+			againresult = RobotA(composition, whiteypoint, whitexpoint);
+			resultpoint[0] = againresult[0];
+			resultpoint[1] = againresult[1];
+			if (composition[resultpoint[1]][resultpoint[0]] == 0)
+			{
+				resultpoint[2] = againresult[2];
+				resultpoint[axpoint] = againresult[3];
+				resultpoint[aypoint] = againresult[4];
+				resultpoint[bxpoint] = againresult[5];
+				resultpoint[bypoint] = againresult[6];
+				resultpoint[7] = againresult[7];
+				//更新白棋当前信息
+				whitexpoint = againresult[0];
+				whiteypoint = againresult[1];
+				whitecount = againresult[2] + 1;
+				whiteaxpoint = againresult[3];
+				whiteaypoint = againresult[4];
+				whitebxpoint = againresult[5];
+				whitebypoint = againresult[6];
+				whitedir = resultpoint[7];
+				
+				return resultpoint;
+			}
+			bFlagFindWhite = FALSE;
+			
+		}
+	
+		
+	}
+	
+	
+	for (int i = 6; i < 15; i++)
+	{
+		for (int j = 6; j < 15; j++)
+		{
+			if (composition[i][j] == 0)//找空位
+			{
+				
+				resultpoint[0] = i;
+				resultpoint[1] = j;
+				whitexpoint = j;
+				whiteypoint = i;
+				whitecount =1;
+				
+				
+				return resultpoint;
+			}
+
+		}
+	}
+	
+	
+
+}
+
+LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
+{
+	HDC hdc;
+	PAINTSTRUCT ps;
+	static int cxClient, cyClient, clunit, pos[15][15], unit[15][15],RSIZE;//unit0=空，1=黑，2=白; RSIZE 棋子半径
+	static POINT point[15 * 15];//寄存上一次点击位置
+	int i, j,xpos,ypos,xpoint,ypoint;
+	static int index;//记录点击次数
+	static int lastxpoint, lastypoint;//寄存上一次对方下棋位置
+	static BOOL bFlagRobotPK;
+	HPEN hpen,oldhpen;
+	
+	
+
+	
+	
+	switch (message)
+	{
+		case WM_CREATE:
+			for (i = 0; i < 15; i++)
+			{
+				for (j = 0; j < 15; j++)
+				{
+					pos[i][j] = 15 * i + j;
+					unit[i][j] = 0;
+				}
+			}
+			index = 0;
+			return 0;
+
+	case WM_SIZE:
+		cxClient = LOWORD(lParam);
+		cyClient = HIWORD(lParam);
+		clunit = (min(cxClient, cyClient) - LRESERVE) / 15;
+		RSIZE =  clunit/5*2;
+		point[0].x = cxClient / 2 - 7 * clunit;
+		point[0].y = cyClient / 2 - 7 * clunit;
+		
+		return 0;
+
+	case WM_LBUTTONDOWN:
+		if (bFlagRobotPK&&(index%2!=0)&&index!=0)
+		{
+			int *robotans;
+			robotans = RobotA(unit,  lastypoint, lastxpoint);
+
+			xpos = point[pos[*(robotans + 1)][*robotans]].x;
+			ypos= point[pos[*(robotans + 1)][*robotans]].y;
+		}
+		else
+		{
+			xpos = GET_X_LPARAM(lParam);
+			ypos = GET_Y_LPARAM(lParam);
+		}
+		
+		//判断点击位置坐标
+		if (xpos<point[pos[0][0]].x || xpos>point[pos[0][14]].x || ypos<point[pos[0][0]].y || ypos>point[pos[14][0]].y)
+		{
+			MessageBox(NULL, TEXT("请在棋盘内点击哦(⊙o⊙)"), TEXT("提示"), MB_ICONQUESTION|MB_OK);
+		}
+		else
+		{
+			xpoint = (xpos - point[pos[0][0]].x) / clunit;
+			if (xpos - point[pos[0][xpoint]].x > clunit / 2)
+			{
+				xpoint++;
+			}
+			ypoint=(ypos-point[pos[0][0]].y)/ clunit;
+			if (ypos - point[pos[ypoint][0]].y > clunit / 2)
+			{
+				ypoint++;
+			}
+			//判断该位置棋子情况：有棋子且点击则提示违规 
+			if (unit[ypoint][xpoint] != 0)
+			{
+				MessageBox(NULL, TEXT("违规！啪~啪~换个地方下吧！"), TEXT("提示"), MB_ICONSTOP| MB_OK);
+			}
+			else
+			{
+				index++;
+				if (index % 2 != 0)//奇数次点击下黑子，偶数次点击下白子
+				{
+					unit[ypoint][xpoint] = 1;//黑
+					lastxpoint = xpoint;
+					lastypoint = ypoint;
+					if (blackxpoint == -1)
+					{
+						blackxpoint = xpoint;
+						blackypoint = ypoint;
+					}
+				}
+				else
+				{
+					unit[ypoint][xpoint] = 2;//白
+
+				}
+				//画棋子
+				hdc=GetDC(hwnd);
+				if(unit[ypoint][xpoint] == 1)
+					SelectObject(hdc, GetStockObject(BLACK_BRUSH));
+				else
+					SelectObject(hdc, GetStockObject(WHITE_BRUSH));
+				Ellipse(hdc, point[pos[ypoint][xpoint]].x - RSIZE, point[pos[ypoint][xpoint]].y - RSIZE, point[pos[ypoint][xpoint]].x + RSIZE, point[pos[ypoint][xpoint]].y + RSIZE);
+				
+				ReleaseDC(hwnd,hdc);
+				
+				int (*result)[11];
+				TCHAR szBUffer[128];
+				if (index >= 9)
+				{
+					result = WhoWin(unit, ypoint, xpoint);
+					
+
+					if (result[0][0] == 5|| result[1][0] == 5|| result[2][0] == 5|| result[3][0] == 5)
+					{
+						if (index % 2 != 0)
+							StringCchPrintf(szBUffer, 128, TEXT("黑方获胜！"));
+						else
+						{
+							StringCchPrintf(szBUffer, 128, TEXT("白方获胜！"));
+							if(bFlagRobotPK)
+								StringCchPrintf(szBUffer, 128, TEXT("ROBOT获胜！"));
+
+						}
+						if (MessageBox(NULL, szBUffer, TEXT("WINNER"), MB_ICONINFORMATION | MB_OK) == IDOK)
+						{
+							for (i = 0; i < 15; i++)
+							{
+								for (j = 0; j < 15; j++)
+								{
+									pos[i][j] = 15 * i + j;
+									unit[i][j] = 0;
+								}
+							}
+							index = 0;
+							InvalidateRect(hwnd, NULL, TRUE);
+							UpdateWindow(hwnd);
+						}
+						whitecount = 0;
+
+					}
+				}
+				
+
+				
+			}
+		}
+		
+
+			return 0;
+
+	case WM_RBUTTONDOWN:
+		if (MessageBox(NULL, TEXT("重新开始吗？"), TEXT("提示"), MB_YESNO) == IDYES)
+		{
+			for (i = 0; i < 15; i++)
+			{
+				for (j = 0; j < 15; j++)
+				{
+					pos[i][j] = 15 * i + j;
+					unit[i][j] = 0;
+				}
+			}
+			index = 0;
+			whitecount = 0;
+			InvalidateRect(hwnd, NULL, TRUE);
+			UpdateWindow(hwnd);
+		}
+		
+		
+		
+		return 0;
+
+	case WM_PAINT:
+		hdc = BeginPaint(hwnd, &ps);
+		if (cxClient == 0)
+		{
+			if (MessageBox(NULL, TEXT("要跟机器人对战吗？"), TEXT("Hi"), MB_YESNO) == IDYES)
+				bFlagRobotPK = TRUE;
+			else
+				bFlagRobotPK = FALSE;
+						
+			cxClient =ps.rcPaint.right-ps.rcPaint.left;
+			cyClient = ps.rcPaint.bottom - ps.rcPaint.top;
+			clunit = (min(cxClient, cyClient) - LRESERVE) / 15;
+			RSIZE = clunit / 5 * 2;
+			point[0].x = cxClient / 2 - 7 * clunit;
+			point[0].y = cyClient / 2 - 7 * clunit;
+		}
+		
+		//初始化棋盘A1-A2
+		hpen = CreatePen(PS_INSIDEFRAME, 1, RGB(0, 0, 0));
+		oldhpen = SelectObject(hdc, hpen);
+		//A1：网格
+		for (i = 0; i < 15; i++)
+		{
+			for (j = 0; j < 15; j++)
+			{
+
+				//Rectangle(hdc, point[0].x + j * clunit, point[0].y + i* clunit, point[0].x + (j + 1) * clunit, point[0].y + (i + 1) * clunit);
+				point[pos[i][j]].x = point[0].x + j * clunit;
+				point[pos[i][j]].y = point[0].y + i * clunit;
+			}
+		}
+		for (i = 0; i < 15; i++)
+		{
+			MoveToEx(hdc, point[0].x, point[pos[i][0]].y, NULL);
+			LineTo(hdc, point[14].x, point[pos[i][14]].y);
+			MoveToEx(hdc, point[pos[0][i]].x, point[0].y, NULL);
+			LineTo(hdc, point[pos[14][i]].x, point[pos[14][0]].y);
+		}
+		
+		//A2黑点
+		SelectObject(hdc, GetStockObject(BLACK_BRUSH));
+		Ellipse(hdc, point[pos[3][3]].x - 5, point[pos[3][3]].y - 5, point[pos[3][3]].x + 5, point[pos[3][3]].y + 5);
+		Ellipse(hdc, point[pos[3][11]].x - 5, point[pos[3][11]].y - 5, point[pos[3][11]].x + 5, point[pos[3][11]].y + 5);
+		Ellipse(hdc, point[pos[11][3]].x - 5, point[pos[11][3]].y - 5, point[pos[11][3]].x + 5, point[pos[11][3]].y + 5);
+		Ellipse(hdc, point[pos[11][11]].x - 5, point[pos[11][11]].y - 5, point[pos[11][11]].x + 5, point[pos[11][11]].y + 5);
+		Ellipse(hdc, point[pos[7][7]].x - 5, point[pos[7][7]].y - 5, point[pos[7][7]].x + 5, point[pos[7][7]].y + 5);
+		DeleteObject(hpen);
+		//画棋子
+		for (i = 0; i < 15; i++)
+		{
+			for (j = 0; j < 15; j++)
+			{
+				if (unit[i][j] == 1)
+				{
+					SelectObject(hdc, GetStockObject(BLACK_BRUSH));
+					ypoint = i;
+					xpoint = j;
+					Ellipse(hdc, point[pos[ypoint][xpoint]].x - RSIZE, point[pos[ypoint][xpoint]].y - RSIZE, point[pos[ypoint][xpoint]].x + RSIZE, point[pos[ypoint][xpoint]].y + RSIZE);
+				}
+				if (unit[i][j] == 2)
+				{
+					SelectObject(hdc, GetStockObject(WHITE_BRUSH));
+					ypoint = i;
+					xpoint = j;
+					Ellipse(hdc, point[pos[ypoint][xpoint]].x - RSIZE, point[pos[ypoint][xpoint]].y - RSIZE, point[pos[ypoint][xpoint]].x + RSIZE, point[pos[ypoint][xpoint]].y + RSIZE);
+				}
+
+			}
+		}
+
+
+		EndPaint(hwnd, &ps);
+		return 0;
+
+	case WM_CLOSE:
+		if (MessageBox(NULL, TEXT("你真的不玩了吗？"), TEXT("提示"), MB_ICONEXCLAMATION|MB_YESNOCANCEL) == IDYES)
+			DestroyWindow(hwnd);
+
+
+			return 0;
+
+	case WM_DESTROY:
+		PostQuitMessage(0);
+		return 0;
+	}
+
+	return DefWindowProc(hwnd, message, wParam, lParam);
+}
